@@ -1,5 +1,5 @@
 require('dotenv').config();
-require('@shopify/shopify-api/adapters/web-api');
+require('@shopify/shopify-api/adapters/node');
 const express = require('express');
 const { shopifyApi, LATEST_API_VERSION } = require('@shopify/shopify-api');
 const cors = require('cors');
@@ -16,7 +16,7 @@ app.use(cors({
 
 app.use(express.json());
 
-// Initialize Shopify API
+// Initialize Shopify API with proper configuration
 const shopify = shopifyApi({
   apiKey: process.env.SHOPIFY_API_KEY,
   apiSecretKey: process.env.SHOPIFY_API_SECRET,
@@ -26,8 +26,8 @@ const shopify = shopifyApi({
   isEmbeddedApp: true,
 });
 
-// Authentication endpoint
-app.post('/auth', async(req, res) => {
+// Fixed authentication endpoint
+app.post('/auth', (req, res) => {
   const { shop } = req.body;
   
   if (!shop) {
@@ -35,10 +35,23 @@ app.post('/auth', async(req, res) => {
   }
 
   try {
-    const authUrl = await shopify.auth.begin({
+    // Create proper request object with headers
+    const rawRequest = {
+      headers: req.headers,
+      method: req.method,
+      url: req.originalUrl,
+      query: req.query,
+      body: req.body,
+      getHeader: (name) => req.get(name),
+      protocol: req.protocol,
+      hostname: req.hostname,
+    };
+
+    const authUrl = shopify.auth.begin({
       shop,
       callbackPath: '/auth/callback',
       isOnline: false,
+      rawRequest,  // Pass the properly constructed request
       callbackUrl: `${process.env.HOST}/auth/callback`
     });
 
@@ -52,24 +65,12 @@ app.post('/auth', async(req, res) => {
   }
 });
 
-// Fixed auth callback with complete rawResponse
+// Auth callback handler
 app.get('/auth/callback', async (req, res) => {
   try {
     const { shop, host } = req.query;
     
-    // Create complete rawResponse object
-    const rawResponse = {
-      statusCode: 200,
-      statusMessage: 'OK',
-      getHeader: (name) => res.get(name),
-      setHeader: (name, value) => res.set(name, value),
-      write: (chunk) => res.write(chunk),
-      end: () => {
-        res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth-success?shop=${shop}&host=${host}`);
-      }
-    };
-
-    await shopify.auth.callback({
+    const callbackResponse = await shopify.auth.callback({
       rawRequest: {
         headers: req.headers,
         method: req.method,
@@ -80,7 +81,14 @@ app.get('/auth/callback', async (req, res) => {
         protocol: req.protocol,
         hostname: req.hostname,
       },
-      rawResponse
+      rawResponse: {
+        getHeader: () => {},
+        setHeader: (name, value) => res.set(name, value),
+        end: () => {
+          res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth-success?shop=${shop}&host=${host}`);
+        },
+        statusCode: 200,
+      }
     });
 
   } catch (error) {
