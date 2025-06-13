@@ -37,6 +37,8 @@ app.post('/auth', (req, res) => {
     shop,
     callbackPath: '/auth/callback',
     isOnline: false,
+    rawRequest:req,
+    rawResponse:res
   });
 
   res.json({ authUrl });
@@ -50,6 +52,8 @@ app.get('/auth/callback', async (req, res) => {
       rawRequest: req,
       rawResponse: res,
     });
+
+    localStorage.setItem("access_token", session);
 
     // Redirect to frontend with success and session data
     res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth-success?shop=${shop}&host=${host}`);
@@ -67,7 +71,11 @@ app.get('/api/products', async (req, res) => {
       return res.status(400).json({ error: 'Shop parameter is required' });
     }
 
-    const session = shopify.session.customAppSession(shop);
+    let session = shopify.session.customAppSession(shop);
+    if(!session){
+        session = localStorage.getItem("access_token", session);
+    }
+
     const client = new shopify.clients.Rest({ session });
 
     const products = await client.get({ 
