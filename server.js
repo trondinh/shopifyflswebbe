@@ -26,8 +26,9 @@ const shopify = shopifyApi({
   isEmbeddedApp: true,
 });
 
-// Fixed authentication endpoint
-app.post('/auth', (req, res) => {
+// Authentication endpoint
+// In your auth endpoint (/auth)
+app.post('/auth', async (req, res) => {
   const { shop } = req.body;
   
   if (!shop) {
@@ -35,67 +36,99 @@ app.post('/auth', (req, res) => {
   }
 
   try {
-    // Create proper request object with headers
-    const rawRequest = {
-      headers: req.headers,
-      method: req.method,
-      url: req.originalUrl,
-      query: req.query,
-      body: req.body,
-      getHeader: (name) => req.get(name),
-      protocol: req.protocol,
-      hostname: req.hostname,
-    };
-
-    const authUrl = shopify.auth.begin({
+    const authUrl = await shopify.auth.begin({
       shop,
       callbackPath: '/auth/callback',
       isOnline: false,
-      rawRequest,  // Pass the properly constructed request
+      // Add this to ensure proper URL construction
       callbackUrl: `${process.env.HOST}/auth/callback`
     });
+
+    console.log(authUrl)
 
     res.json({ authUrl });
   } catch (error) {
     console.error('Auth begin error:', error);
-    res.status(500).json({ 
-      error: 'Failed to start OAuth process',
-      details: error.message 
-    });
+    res.status(500).json({ error: 'Failed to start OAuth process' });
   }
 });
 
-// Auth callback handler
+// Fixed auth callback with proper headers handling
 app.get('/auth/callback', async (req, res) => {
   try {
     const { shop, host } = req.query;
     
-    const callbackResponse = await shopify.auth.callback({
-      rawRequest: {
-        headers: req.headers,
-        method: req.method,
-        url: req.originalUrl,
-        query: req.query,
-        body: req.body,
-        getHeader: (name) => req.get(name),
-        protocol: req.protocol,
-        hostname: req.hostname,
-      },
-      rawResponse: {
-        getHeader: () => {},
-        setHeader: (name, value) => res.set(name, value),
-        end: () => {
-          res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth-success?shop=${shop}&host=${host}`);
-        },
-        statusCode: 200,
-      }
+    // Create a proper rawRequest object with all required properties
+    // const rawRequest = {
+    //   headers: req.headers,
+    //   method: req.method,
+    //   url: req.originalUrl,
+    //   query: req.query,
+    //   body: req.body,
+    //   // Shopify API expects these additional properties
+    //   getHeader: (name) => req.get(name),
+    //   protocol: req.protocol,
+    //   hostname: req.hostname,
+    // };
+
+    // // Create a rawResponse object that handles the final redirect
+    // const rawResponse = {
+    //   getHeader: () => {},
+    //   setHeader: (name, value) => res.set(name, value),
+    //   end: () => {
+    //     res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth-success?shop=${shop}&host=${host}`);
+    //   },
+    //   statusCode: 200,
+    // };
+
+    // // Process the OAuth callback
+    // await shopify.auth.callback({
+    //   rawRequest,
+    //   rawResponse,
+    // });
+
+    const callback = await shopify.auth.callback({
+      rawRequest: req,
+      rawResponse: res,
     });
+
+    req.session.shop = callback.session.shop;
+    req.session.accessToken = callback.session.accessToken;
+
+    console.log("req.session.shop " +callback.session.shop);
+    console.log("callback.session.accessToken " +callback.session.accessToken);
 
   } catch (error) {
     console.error('Auth callback error:', error);
     if (!res.headersSent) {
       res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth-error?message=${encodeURIComponent(error.message)}`);
     }
+  }
+});
+
+// Products API endpoint
+app.get('/api/products', async (req, res) => {
+  const { shop } = req.query;
+  
+  if (!shop) {
+    return res.status(400).json({ error: 'Shop parameter is required' });
+  }
+
+  try {
+    const session = shopify.session.customAppSession(shop);
+    const client = new shopify.clients.Rest({ session });
+
+    const products = await client.get({ 
+      path: 'products',
+      query: { limit: 10 }
+    });
+    res.json(products.body);
+  } catch (error) {
+    console.error('Products API error:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch products',
+      details: error.message 
+    });
   }
 });
 
