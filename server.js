@@ -3,6 +3,7 @@ require('@shopify/shopify-api/adapters/node');
 const express = require('express');
 const { shopifyApi, LATEST_API_VERSION } = require('@shopify/shopify-api');
 const cors = require('cors');
+const storeSession = require('@shopify/shopify-app-session-storage-memory');
 
 const app = express();
 
@@ -37,11 +38,11 @@ app.post('/auth', async (req, res) => {
 
   try {
     const authUrl = await shopify.auth.begin({
-      shop,
-      callbackPath: '/auth/callback',
-      isOnline: false,
-      // Add this to ensure proper URL construction
-      callbackUrl: `${process.env.HOST}/auth/callback`
+    shop: shopify.utils.sanitizeShop(shop, true),
+    callbackPath: '/auth/callback',
+    isOnline: false,
+    rawRequest: req,
+    rawResponse: res,
     });
 
     console.log(authUrl)
@@ -91,6 +92,8 @@ app.get('/auth/callback', async (req, res) => {
       rawRequest: req,
       rawResponse: res,
     });
+
+    await storeSession(callback.session.toObject());
 
     req.session.shop = callback.session.shop;
     req.session.accessToken = callback.session.accessToken;

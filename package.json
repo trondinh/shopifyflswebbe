@@ -11,6 +11,7 @@
   "description": "",
   "dependencies": {
     "@shopify/shopify-api": "^11.13.0",
+    "@shopify/shopify-app-session-storage-memory": "^4.0.18",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
     "express": "^5.1.0"
