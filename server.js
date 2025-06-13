@@ -1,4 +1,5 @@
 require('dotenv').config();
+require('@shopify/shopify-api/adapters/web-api');
 const express = require('express');
 const { shopifyApi, LATEST_API_VERSION } = require('@shopify/shopify-api');
 const cors = require('cors');
@@ -26,7 +27,7 @@ const shopify = shopifyApi({
 });
 
 // Authentication endpoint
-app.post('/auth', (req, res) => {
+app.post('/auth', async(req, res) => {
   const { shop } = req.body;
   
   if (!shop) {
@@ -34,7 +35,7 @@ app.post('/auth', (req, res) => {
   }
 
   try {
-    const authUrl = shopify.auth.begin({
+    const authUrl = await shopify.auth.begin({
       shop,
       callbackPath: '/auth/callback',
       isOnline: false,
