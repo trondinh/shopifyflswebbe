@@ -26,9 +26,10 @@ app.post('/', (req, res) => {
 });
 
 app.post('/webhooks', express.text({type: '*/*'}), async (req, res) => {
-  console.log(req.body);
-  console.log(req);
-  console.log(res);
+  console.log(JSON.parse(req.body));
+  //console.log(req.body);
+  //console.log(req);
+  //console.log(res);
   res.send('webhooks');
 });
 
