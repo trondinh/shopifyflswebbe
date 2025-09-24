@@ -10,6 +10,14 @@ app.use(express.raw({ type: '*/*' }));
 
 const secret = process.env.SHOPIFY_API_SECRET; 
 
+app.use((req, res, next) => {
+  console.log('Request Headers:');
+  for (const header in req.headers) {
+    console.log(`${header}: ${req.headers[header]}`);
+  }
+  next(); // Pass control to the next middleware or route handler
+});
+
 app.post('/', (req, res) => {
   const shopifyHmac = req.headers['x-shopify-hmac-sha256'];
   const byteArray = req.body;
